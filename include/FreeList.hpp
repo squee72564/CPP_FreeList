@@ -6,6 +6,7 @@
 #include <limits>
 #include <cstddef>
 #include <algorithm>
+#include <exception>
 
 template<typename T>
 class FreeList {
@@ -17,6 +18,7 @@ private:
         size_t nextFree;
 
         Node(const T& data) : data(data), next(SIZE_MAX), prev(SIZE_MAX), nextFree(SIZE_MAX) {}
+        Node(T&& data) : data(std::move(data)), next(SIZE_MAX), prev(SIZE_MAX), nextFree(SIZE_MAX) {}
         Node() : data(T{}), next(SIZE_MAX), prev(SIZE_MAX), nextFree(SIZE_MAX) {}
         ~Node() = default;
 
@@ -30,7 +32,24 @@ private:
     size_t head;
     size_t tail;
     size_t freeHead;
-    size_t size;
+    size_t size_;
+
+    template <typename U>
+    size_t allocateNode(U&& data) {
+        size_t index;
+
+        if (freeHead != SIZE_MAX) {
+            index = freeHead;
+            freeHead = nodes[freeHead].nextFree;
+            nodes[index] = Node(std::forward<T>(data));
+        } else {
+            index = nodes.size();
+            nodes.emplace_back(std::forward<T>(data));
+        }
+
+        size_++;
+        return index;
+    }
 
     size_t allocateNode(const T& data) {
         size_t index;
@@ -44,7 +63,7 @@ private:
             nodes.emplace_back(data);
         }
 
-	size++;
+        size_++;
 
         return index;
     }
@@ -70,7 +89,7 @@ private:
         nodes[index].nextFree = freeHead;
         freeHead = index;
 
-	size--;
+	size_--;
     }
 
     template <typename Compare = std::less<T> >
@@ -141,6 +160,7 @@ private:
     }
 
 public:
+
     class Iterator {
     public:
         using iterator_category = std::bidirectional_iterator_tag;
@@ -213,7 +233,80 @@ public:
         size_t index;
     };
 
+    class ConstIterator {
+    public:
+	using iterator_category = std::bidirectional_iterator_tag;
+	using value_type = T;
+	using difference_type = std::ptrdiff_t;
+	using pointer = const T*;
+	using reference = const T&;
+
+	ConstIterator() : list(nullptr), index(SIZE_MAX) {}
+
+	ConstIterator(const FreeList* list, size_t index)
+	    : list(list), index(index) {}
+
+	ConstIterator(const Iterator& it)
+	    : list(it.list), index(it.getIndex()) {}
+
+	ConstIterator(const ConstIterator&) = default;
+	ConstIterator(ConstIterator&&) noexcept = default;
+	ConstIterator& operator=(const ConstIterator&) = default;
+	ConstIterator& operator=(ConstIterator&&) noexcept = default;
+
+	reference operator*() const {
+	    return list->nodes[index].data;
+	}
+
+	pointer operator->() const {
+	    return &list->nodes[index].data;
+	}
+
+	ConstIterator& operator++() {
+	    index = list->nodes[index].next;
+	    return *this;
+	}
+
+	ConstIterator operator++(int) {
+	    ConstIterator temp = *this;
+	    ++(*this);
+	    return temp;
+	}
+
+	ConstIterator& operator--() {
+	    if (index == SIZE_MAX) {
+		index = list->tail;
+	    } else {
+		index = list->nodes[index].prev;
+	    }
+	    return *this;
+	}
+
+	ConstIterator operator--(int) {
+	    ConstIterator temp = *this;
+	    --(*this);
+	    return temp;
+	}
+
+	bool operator==(const ConstIterator& other) const {
+	    return (index == other.index) && (list == other.list);
+	}
+
+	bool operator!=(const ConstIterator& other) const {
+	    return !(*this == other);
+	}
+
+	size_t getIndex() const {
+	    return index;
+	}
+
+    private:
+	const FreeList* list; // Pointer to const FreeList
+	size_t index;
+    };
+
     FreeList() : head(SIZE_MAX), tail(SIZE_MAX), freeHead(SIZE_MAX) {}
+    ~FreeList() = default;
 
     FreeList(const FreeList& other) = default;
     FreeList(FreeList&& other) noexcept = default;
@@ -241,21 +334,23 @@ public:
         nodes.reserve(count);
     }
 
-    void push_front(const T& data) {
-        size_t newIndex = allocateNode(data);
+    template <typename U>
+    void push_front(U&& data) {
+        size_t index = allocateNode(std::forward<U>(data));
     
         if (head != SIZE_MAX) {
-            nodes[newIndex].next = head;
-            nodes[head].prev = newIndex;
+            nodes[index].next = head;
+            nodes[head].prev = index;
         }
-        head = newIndex;
+        head = index;
         if (tail == SIZE_MAX) {
-            tail = newIndex;
+            tail = index;
         }
     }
     
-    size_t push_back(const T& data) {
-        size_t index = allocateNode(data);
+    template <typename U>
+    void push_back(U&& data) {
+        size_t index = allocateNode(std::forward<U>(data));
     
         if (head == SIZE_MAX) {
             head = index;
@@ -265,9 +360,36 @@ public:
             nodes[index].prev = tail;
             tail = index;
         }
-    
-        return index;
     }
+
+    template<typename... Args>
+    void emplace_front(Args&&... args) {
+	size_t index = allocateNode(T(std::forward<Args>(args)...));
+
+        if (head != SIZE_MAX) {
+            nodes[index].next = head;
+            nodes[head].prev = index;
+        }
+        head = index;
+        if (tail == SIZE_MAX) {
+            tail = index;
+        }
+    }
+
+    template<typename... Args>
+    void emplace_back(Args&&... args) {
+	size_t index = allocateNode(T(std::forward<Args>(args)...));
+
+        if (head == SIZE_MAX) {
+            head = index;
+            tail = index;
+        } else {
+            nodes[tail].next = index;
+            nodes[index].prev = tail;
+            tail = index;
+        }
+    }
+
     void erase(Iterator it) {
         remove(it.getIndex());
     }
@@ -311,6 +433,22 @@ public:
         return Iterator(this, newIndex);
     }
 
+    void swap(FreeList& other) noexcept {
+	std::swap(head, other.head);
+	std::swap(tail, other.tail);
+	std::swap(freeHead, other.freeHead);
+	nodes.swap(other.nodes);
+	std::swap(size_, other.size_);
+    }
+
+    const T& front() const {
+        return nodes[head].data;
+    }
+
+    const T& back() const {
+        return nodes[tail].data;
+    }
+
     T& front() {
         return nodes[head].data;
     }
@@ -333,30 +471,46 @@ public:
         remove(tail);
     }
 
-    bool empty() const {
+    bool empty() const noexcept {
         return head == SIZE_MAX && tail == SIZE_MAX;
+    }
+
+    size_t size() const noexcept {
+	return size_;
+    }
+
+    size_t capacity() const noexcept {
+	return nodes.capacity();
+    }
+
+    void shrink_to_fit() {
+	nodes.shrink_to_fit();
     }
 
     void clear() {
         head = tail = freeHead = SIZE_MAX;
+	size_ = 0;
         nodes.clear();
     }
 
-    Iterator begin() {
-        return Iterator(this, head);
-    }
+    using reverse_iterator = std::reverse_iterator<Iterator>;
+    using const_reverse_iterator = std::reverse_iterator<ConstIterator>;
 
-    Iterator begin() const {
-        return Iterator(this, head);
-    }
+    Iterator begin() { return Iterator(this, head); }
+    ConstIterator begin() const { return ConstIterator(this, head); }
+    ConstIterator cbegin() const noexcept { return ConstIterator(this, head); }
 
-    Iterator end() {
-        return Iterator(this, SIZE_MAX);
-    }
+    Iterator end() { return Iterator(this, SIZE_MAX); }
+    ConstIterator end() const { return ConstIterator(this, SIZE_MAX); }
+    ConstIterator cend() const noexcept { return ConstIterator(this, SIZE_MAX); }
 
-    Iterator end() const {
-        return Iterator(this, SIZE_MAX);
-    }
+    reverse_iterator rbegin() { return reverse_iterator(end()); }
+    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
+    const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(cend()); }
+
+    reverse_iterator rend() { return reverse_iterator(begin()); }
+    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
+    const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
 };
 
 #endif
