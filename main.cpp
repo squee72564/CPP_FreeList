@@ -165,6 +165,7 @@ void test_performance() {
     measure_insertion(stdList, count); // Reinsert for iteration test
     measure_iteration(stdList);
     measure_deletion(stdList);
+    stdList.clear();
 
     std::cout << "\nTesting FreeList...\n";
     measure_insertion(freeList, count);
@@ -172,54 +173,45 @@ void test_performance() {
     measure_insertion(freeList, count); // Reinsert for iteration test
     measure_iteration(freeList);
     measure_deletion(freeList);
+    freeList.clear();
 }
 
 void test_LFUCache() {
     LFUCache* obj = new LFUCache(2);
     obj->put(1,1);
     std::cout << "1\n";
-    obj->print();
 
     obj->put(2,2);
     std::cout << "2\n";
-    obj->print();
     
     int t = obj->get(1);
     std::cout << "3: " << t << "\n";
     assert(t == 1);
-    obj->print();
     
     obj->put(3,3);
     std::cout << "4\n";
-    obj->print();
     
     t = obj->get(2);
     std::cout << "5: " << t << "\n";
     assert(t == -1);
-    obj->print();
     
     t = obj->get(3);
     std::cout << "6: " << t << "\n";
     assert(t == 3);
-    obj->print();
     
     obj->put(5,5);
     std::cout << "7\n";
-    obj->print();
     
     t = obj->get(1);
     std::cout << "8: " << t << "\n";
     assert(t == -1);
-    obj->print();
     
     t = obj->get(3);
     std::cout << "9: " << t << "\n";
     assert(t == 3);
-    obj->print();
 
     t = obj->get(5);
     std::cout << "10: " << t << "\n";
-    obj->print();
     assert(t == 5);
 }
 
@@ -229,7 +221,7 @@ void test_mergeSort() {
 
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dist(-99,99);
+    std::uniform_int_distribution<> dist(-999,999);
 
     for (int i = 0; i < 25; ++i) {
 	const int t = dist(gen);
@@ -243,10 +235,10 @@ void test_mergeSort() {
     }
     std::cout << "\n";
 
-    freeList.sort(freeList.begin(), freeList.end());
-    std::sort(vec.begin(), vec.end());
+    freeList.sort(std::greater<int>());
+    std::sort(vec.begin(), vec.end(), std::greater<int>());
 
-    std::cout << "After sort\n";
+    std::cout << "\nAfter sort\n";
     for (auto it = freeList.begin(); it != freeList.end(); ++it) {
 	std::cout << *it << " ";
     }
