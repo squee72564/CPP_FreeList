@@ -19,12 +19,18 @@ private:
         Node(const T& data) : data(data), next(SIZE_MAX), prev(SIZE_MAX), nextFree(SIZE_MAX) {}
         Node() : data(T{}), next(SIZE_MAX), prev(SIZE_MAX), nextFree(SIZE_MAX) {}
         ~Node() = default;
+
+	Node(const Node&) = default;
+	Node(Node&&) noexcept = default;
+	Node& operator=(const Node&) = default;
+	Node& operator=(Node&&) noexcept = default;
     };
 
     std::vector<Node> nodes;
     size_t head;
     size_t tail;
     size_t freeHead;
+    size_t size;
 
     size_t allocateNode(const T& data) {
         size_t index;
@@ -37,6 +43,8 @@ private:
             index = nodes.size();
             nodes.emplace_back(data);
         }
+
+	size++;
 
         return index;
     }
@@ -61,6 +69,75 @@ private:
 
         nodes[index].nextFree = freeHead;
         freeHead = index;
+
+	size--;
+    }
+
+    template <typename Compare = std::less<T> >
+    size_t merge(const size_t first, const size_t second, size_t& tail, const Compare& comp = Compare()) {
+	if (first == SIZE_MAX) return second;
+	if (second == SIZE_MAX) return first;
+
+	size_t result = SIZE_MAX;
+
+	if (comp(nodes[first].data, nodes[second].data)) {
+	    result = first;
+
+	    nodes[first].next = merge(nodes[first].next, second, tail, comp);
+	    if (nodes[first].next != SIZE_MAX) {
+		nodes[nodes[first].next].prev = first;
+	    } else {
+		tail = first;
+	    }
+	    nodes[first].prev = SIZE_MAX;
+	} else {
+	    result = second;
+
+	    nodes[second].next = merge(first, nodes[second].next, tail, comp);
+	    if (nodes[second].next != SIZE_MAX) {
+		nodes[nodes[second].next].prev = second;
+	    } else {
+		tail = second;
+	    }
+	    nodes[second].prev = SIZE_MAX;
+	}
+	return result;
+    }
+
+    std::pair<size_t,size_t> split(const size_t start, const size_t end) {
+	if (start == end) return {start, start};
+
+	size_t slow = start;
+	size_t fast = start;
+
+	while (fast != end && nodes[fast].next != end) {
+	    slow = nodes[slow].next;
+	    fast = nodes[nodes[fast].next].next;
+	}
+
+	size_t second_half = nodes[slow].next;
+	nodes[slow].next = SIZE_MAX;
+
+	if (second_half != SIZE_MAX) {
+	    nodes[second_half].prev = SIZE_MAX;
+	}
+	return {second_half,slow};
+    }
+
+    template <typename Compare = std::less<T> >
+    size_t mergeSort(size_t start, size_t end, const Compare& comp = Compare()) {
+	if (start == SIZE_MAX || start == end) return start;
+
+	auto [second_half_start, start_end] = split(start, end);
+
+	start = mergeSort(start, start_end, comp);
+	second_half_start = mergeSort(second_half_start, end, comp);
+
+	size_t _tail = SIZE_MAX;
+	size_t _head = merge(start, second_half_start, _tail, comp);
+	tail = _tail;
+
+	return _head;
     }
 
 public:
@@ -80,6 +157,11 @@ public:
         Iterator(const FreeList* list, size_t index)
             : list(const_cast<FreeList*>(list)), index(index) {}
 
+	Iterator(const Iterator&) = default;
+	Iterator(Iterator&&) noexcept = default;
+	Iterator& operator=(const Iterator&) = default;
+	Iterator& operator=(Iterator&&) noexcept = default;
+
         reference operator*() {
             return list->nodes[index].data;
         }
@@ -95,18 +177,22 @@ public:
 
         Iterator operator++(int) {
             Iterator temp = *this;
-            index = list->nodes[index].next;
+	    ++(*this);
             return temp;
         }
 
         Iterator& operator--() {
-            index = list->nodes[index].prev;
+	    if (index == SIZE_MAX) {
+		index = list->tail;
+	    } else {
+		index = list->nodes[index].prev;
+	    }
             return *this;
         }
 
         Iterator operator--(int) {
             Iterator temp = *this;
-            index = list->nodes[index].prev;
+	    --(*this);
             return temp;
         }
 
@@ -129,79 +215,27 @@ public:
 
     FreeList() : head(SIZE_MAX), tail(SIZE_MAX), freeHead(SIZE_MAX) {}
 
-    size_t merge(size_t first, size_t second, size_t& tail) {
-	if (first == SIZE_MAX) return second;
-	if (second == SIZE_MAX) return first;
+    FreeList(const FreeList& other) = default;
+    FreeList(FreeList&& other) noexcept = default;
+    FreeList& operator=(const FreeList& other) = default;
+    FreeList& operator=(FreeList&& other) noexcept = default;
 
-	size_t result = SIZE_MAX;
+    template <typename Compare = std::less<T> >
+    void sort(const Compare& comp = Compare()) {
+	if (empty()) return;	
 
-	if (nodes[first].data < nodes[second].data) {
-	    result = first;
-
-	    nodes[first].next = merge(nodes[first].next, second, tail);
-	    if (nodes[first].next != SIZE_MAX) {
-		nodes[nodes[first].next].prev = first;
-	    } else {
-		tail = first;
-	    }
-	    nodes[first].prev = SIZE_MAX;
-	} else {
-	    result = second;
-
-	    nodes[second].next = merge(first, nodes[second].next, tail);
-	    if (nodes[second].next != SIZE_MAX) {
-		nodes[nodes[second].next].prev = second;
-	    } else {
-		tail = second;
-	    }
-	    nodes[second].prev = SIZE_MAX;
-	}
-	return result;
+	head = mergeSort(head, tail, comp);
     }
 
-    std::pair<size_t,size_t> split(size_t start, size_t end) {
-	if (start == end) return {start, start};
-
-	size_t slow = start;
-	size_t fast = start;
-
-	while (fast != end && nodes[fast].next != end) {
-	    slow = nodes[slow].next;
-	    fast = nodes[nodes[fast].next].next;
-	}
-
-	size_t second_half = nodes[slow].next;
-	nodes[slow].next = SIZE_MAX;
-
-	if (second_half != SIZE_MAX) {
-	    nodes[second_half].prev = SIZE_MAX;
-	}
-	return {second_half,slow};
-    }
-
-    size_t mergeSort(size_t start, size_t end) {
-	if (start == SIZE_MAX || start == end) return start;
-
-	auto [second_half_start, start_end] = split(start, end);
-
-	start = mergeSort(start, start_end);
-	second_half_start = mergeSort(second_half_start, end);
-
-	size_t _tail = SIZE_MAX;
-	size_t _head = merge(start, second_half_start, _tail);
-	tail = _tail;
-
-	return _head;
-    }
-    void sort(Iterator start, Iterator _end) {
-	if (start == end() || start == _end) return;	
+    template <typename Compare = std::less<T> >
+    void sort(const Iterator start = begin(), const Iterator _end = end(), const Compare& comp = Compare()) {
+	if (empty() || start == end() || start == _end) return;	
 
 	size_t start_idx = start.getIndex();
 	size_t end_idx = (_end == end()) ? tail : _end.getIndex();
 
-	head = mergeSort(start_idx, end_idx);
+	head = mergeSort(start_idx, end_idx, comp);
     }
-
 
     void reserve(size_t count) {
         nodes.reserve(count);
@@ -236,6 +270,15 @@ public:
     }
     void erase(Iterator it) {
         remove(it.getIndex());
+    }
+
+    Iterator find(const T& value) {
+	for (Iterator it = begin(); it != end(); ++it) {
+	    if (*it == value) {
+		return it;
+	    }
+	}
+	return end();
     }
 
     Iterator insert(Iterator it, const T& data) {
@@ -295,9 +338,7 @@ public:
     }
 
     void clear() {
-        head = SIZE_MAX;
-        tail = SIZE_MAX;
-        freeHead = SIZE_MAX;
+        head = tail = freeHead = SIZE_MAX;
         nodes.clear();
     }
 
