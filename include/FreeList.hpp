@@ -306,6 +306,32 @@ public:
     };
 
     FreeList() : head(SIZE_MAX), tail(SIZE_MAX), freeHead(SIZE_MAX) {}
+
+    FreeList(size_t count, const T& value = T()) : FreeList() {
+	for (size_t i = 0; i < count; ++i) {
+	    push_back(value);
+	}
+    }
+
+    explicit FreeList(size_t count) : FreeList() {
+	for (size_t i = 0; i < count; ++i) {
+	    push_back(T());
+	}
+    }
+
+    template <class InputIt>
+    FreeList(InputIt first, InputIt last) : FreeList() {
+	for (auto it = first; it != last; ++it) {
+	    push_back(*it);
+	}
+    }
+
+    FreeList(std::initializer_list<T> init) : FreeList() {
+	for (const auto& value : init) {
+	    push_back(value);
+	}
+    }
+
     ~FreeList() = default;
 
     FreeList(const FreeList& other) = default;
@@ -362,6 +388,32 @@ public:
         }
     }
 
+    template<class... Args>
+    Iterator emplace(ConstIterator pos, Args&&... args) {
+
+	if (pos == end()) {
+
+	    return insert(end(), T(std::forward<Args>(args)...));
+	}
+
+	size_t currentIndex = pos.getIndex();
+	
+	size_t newIndex = allocateNode(T(std::forward<Args>(args)...));
+
+	nodes[newIndex].next = currentIndex;
+	nodes[newIndex].prev = nodes[currentIndex].prev;
+
+	if (nodes[currentIndex].prev != SIZE_MAX) {
+	    nodes[nodes[currentIndex].prev].next = newIndex;
+	} else {
+	    head = newIndex;
+	}
+	
+	nodes[currentIndex].prev = newIndex;
+
+	return Iterator(this, newIndex);
+    }
+
     template<typename... Args>
     void emplace_front(Args&&... args) {
 	size_t index = allocateNode(T(std::forward<Args>(args)...));
@@ -374,6 +426,23 @@ public:
         if (tail == SIZE_MAX) {
             tail = index;
         }
+    }
+
+
+    template<typename... Args>
+    T& emplace_back(Args&&... args) {
+	size_t index = allocateNode(T(std::forward<Args>(args)...));
+
+        if (head == SIZE_MAX) {
+            head = index;
+            tail = index;
+        } else {
+            nodes[tail].next = index;
+            nodes[index].prev = tail;
+            tail = index;
+        }
+
+	return nodes[index].data;
     }
 
     template<typename... Args>
@@ -390,8 +459,34 @@ public:
         }
     }
 
-    void erase(Iterator it) {
-        remove(it.getIndex());
+    Iterator erase(Iterator pos) {
+	Iterator next = pos;
+	++next;
+	remove(pos.getIndex());
+	return next;
+    }
+
+    ConstIterator erase(ConstIterator pos) {
+	ConstIterator next = pos;
+	++next;
+	remove(pos.getIndex());
+	return next;
+    }
+
+    Iterator erase(Iterator first, Iterator last) {
+	while (first != last) {
+	    first = erase(first);
+	}
+
+	return last;
+    }
+
+    ConstIterator erase(ConstIterator first, ConstIterator last) {
+	while (first != last) {
+	    first = erase(first);
+	}
+
+	return last;
     }
 
     Iterator find(const T& value) {
@@ -401,6 +496,37 @@ public:
 	    }
 	}
 	return end();
+    }
+
+    template <typename U>
+    Iterator insert(Iterator it, U&& data) {
+        size_t newIndex = allocateNode(std::forward<U>(data));
+    
+        if (!(it == end())) {
+            size_t currentIndex = it.getIndex();
+    
+            nodes[newIndex].next = currentIndex;
+            nodes[newIndex].prev = nodes[currentIndex].prev;
+    
+            if (nodes[currentIndex].prev != SIZE_MAX) {
+                nodes[nodes[currentIndex].prev].next = newIndex;
+            } else {
+                head = newIndex;
+            }
+    
+            nodes[currentIndex].prev = newIndex;
+        } else {
+
+            if (tail != SIZE_MAX) {
+                nodes[tail].next = newIndex;
+                nodes[newIndex].prev = tail;
+            } else {
+                head = newIndex;
+            }
+            tail = newIndex;
+        }
+    
+        return Iterator(this, newIndex);
     }
 
     Iterator insert(Iterator it, const T& data) {
@@ -431,6 +557,50 @@ public:
         }
     
         return Iterator(this, newIndex);
+    }
+
+    template<class InputIt>
+    Iterator insert(Iterator pos, InputIt first, InputIt last) {
+	size_t currentIndex = pos.getIndex();
+	size_t firstNewIndex = SIZE_MAX;
+
+	while (first != last) {
+	    size_t newIndex = allocateNode(*first++);
+	    
+	    if (firstNewIndex == SIZE_MAX) {
+		firstNewIndex = newIndex;
+	    }
+
+	    // Insert the new node in front of currentIndex
+	    if (currentIndex != SIZE_MAX) {
+		nodes[newIndex].next = currentIndex;
+		nodes[newIndex].prev = nodes[currentIndex].prev;
+
+		if (nodes[currentIndex].prev != SIZE_MAX) {
+		    nodes[nodes[currentIndex].prev].next = newIndex;
+		} else {
+		    head = newIndex;
+		}
+
+		nodes[currentIndex].prev = newIndex;
+		currentIndex = newIndex; // Update for the next insertion
+	    } else {
+		// Inserting at the end
+		if (tail != SIZE_MAX) {
+		    nodes[tail].next = newIndex;
+		    nodes[newIndex].prev = tail;
+		} else {
+		    head = newIndex; // List was empty
+		}
+		tail = newIndex;
+	    }
+	}
+
+	return Iterator(this, firstNewIndex);
+    }
+
+    Iterator insert(Iterator pos, std::initializer_list<T> ilist) {
+	return insert(pos, ilist.begin(), ilist.end());
     }
 
     void swap(FreeList& other) noexcept {
