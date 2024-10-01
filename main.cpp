@@ -223,15 +223,18 @@ void test_LFUCache() {
     assert(t == 5);
 }
 
-void testMergeSort() {
+void test_mergeSort() {
     FreeList<int> freeList;
+    std::vector<int> vec;
 
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dist(-99,99);
 
-    for (int i = 0; i < 4; ++i) {
-	freeList.push_back(dist(gen));
+    for (int i = 0; i < 25; ++i) {
+	const int t = dist(gen);
+	vec.push_back(t);
+	freeList.push_back(t);
     }
 
     std::cout << "Before sort\n";
@@ -241,16 +244,23 @@ void testMergeSort() {
     std::cout << "\n";
 
     freeList.sort(freeList.begin(), freeList.end());
+    std::sort(vec.begin(), vec.end());
 
     std::cout << "After sort\n";
     for (auto it = freeList.begin(); it != freeList.end(); ++it) {
 	std::cout << *it << " ";
     }
+
+    for (const int i : vec) {
+	assert(i == freeList.front());
+	freeList.pop_front();
+    }
+
     std::cout << "\n";
 }
 
 int main() {
-    testMergeSort();
+    test_mergeSort();
     test_LFUCache();
     test_performance();
     return 0;

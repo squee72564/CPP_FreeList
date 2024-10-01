@@ -5,6 +5,7 @@
 #include <iterator>
 #include <limits>
 #include <cstddef>
+#include <algorithm>
 
 template<typename T>
 class FreeList {
@@ -13,32 +14,32 @@ private:
         T data;
         size_t next;
         size_t prev;
-        size_t nextFree;  // Pointer to the next free node
+        size_t nextFree;
 
         Node(const T& data) : data(data), next(SIZE_MAX), prev(SIZE_MAX), nextFree(SIZE_MAX) {}
-        Node() : nextFree(SIZE_MAX) {}  // Default constructor for free nodes
+        Node() : data(T{}), next(SIZE_MAX), prev(SIZE_MAX), nextFree(SIZE_MAX) {}
+        ~Node() = default;
     };
 
     std::vector<Node> nodes;
     size_t head;
     size_t tail;
-    size_t freeHead;  // Pointer to the first free node
+    size_t freeHead;
 
     size_t allocateNode(const T& data) {
         size_t index;
 
         if (freeHead != SIZE_MAX) {
-            index = freeHead;  // Get the first free node
-            freeHead = nodes[freeHead].nextFree;  // Update the free list head
-            nodes[index] = Node(data);  // Initialize the new node
+            index = freeHead;
+            freeHead = nodes[freeHead].nextFree;
+            nodes[index] = Node(data);
         } else {
             index = nodes.size();
-            nodes.emplace_back(data);  // Create a new node
+            nodes.emplace_back(data);
         }
 
         return index;
     }
-
 
     void remove(size_t index) {
         if (index >= nodes.size()) return;
@@ -58,9 +59,8 @@ private:
             nodes[nextIndex].prev = prevIndex;
         }
 
-        // Reset the node and add it to the free list
-        nodes[index].nextFree = freeHead;  // Point to the previous free list head
-        freeHead = index;                   // Update free list head
+        nodes[index].nextFree = freeHead;
+        freeHead = index;
     }
 
 public:
@@ -129,76 +129,70 @@ public:
 
     FreeList() : head(SIZE_MAX), tail(SIZE_MAX), freeHead(SIZE_MAX) {}
 
-size_t merge(size_t first, size_t second, size_t& tail) {
-    if (first == SIZE_MAX) return second;
-    if (second == SIZE_MAX) return first;
-	std::cout << "merge\n";
+    size_t merge(size_t first, size_t second, size_t& tail) {
+	if (first == SIZE_MAX) return second;
+	if (second == SIZE_MAX) return first;
 
-    size_t result = SIZE_MAX;
+	size_t result = SIZE_MAX;
 
-    if (nodes[first].data < nodes[second].data) {
-        result = first;
-        // Merge the next node
-        nodes[first].next = merge(nodes[first].next, second, tail);
-        if (nodes[first].next != SIZE_MAX) {
-            nodes[nodes[first].next].prev = first;  // Ensure previous link
-        } else {
-            tail = first;  // Update tail
-        }
-        nodes[first].prev = SIZE_MAX;  // First node has no previous
-    } else {
-        result = second;
-        // Merge the next node
-        nodes[second].next = merge(first, nodes[second].next, tail);
-        if (nodes[second].next != SIZE_MAX) {
-            nodes[nodes[second].next].prev = second;  // Ensure previous link
-        } else {
-            tail = second;  // Update tail
-        }
-        nodes[second].prev = SIZE_MAX;  // Second node has no previous
-    }
-    return result;
-}
+	if (nodes[first].data < nodes[second].data) {
+	    result = first;
 
-size_t split(size_t start, size_t end) {
-    if (start == end) return end;
-	std::cout << "split\n";
+	    nodes[first].next = merge(nodes[first].next, second, tail);
+	    if (nodes[first].next != SIZE_MAX) {
+		nodes[nodes[first].next].prev = first;
+	    } else {
+		tail = first;
+	    }
+	    nodes[first].prev = SIZE_MAX;
+	} else {
+	    result = second;
 
-    size_t slow = start;
-    size_t fast = start;
-
-    // Ensure you are not exceeding the bounds
-    while (fast != end && nodes[fast].next != end) {
-	    std::cout << slow << " " << fast << " " << end << "\n";
-        slow = nodes[slow].next;
-        fast = nodes[nodes[fast].next].next;
+	    nodes[second].next = merge(first, nodes[second].next, tail);
+	    if (nodes[second].next != SIZE_MAX) {
+		nodes[nodes[second].next].prev = second;
+	    } else {
+		tail = second;
+	    }
+	    nodes[second].prev = SIZE_MAX;
+	}
+	return result;
     }
 
-    size_t second_half = nodes[slow].next;
-    nodes[slow].next = SIZE_MAX;  // End the first half
-				  //
-    if (second_half != SIZE_MAX) {
-        nodes[second_half].prev = SIZE_MAX;  // Disconnect previous link of the second half
+    std::pair<size_t,size_t> split(size_t start, size_t end) {
+	if (start == end) return {start, start};
+
+	size_t slow = start;
+	size_t fast = start;
+
+	while (fast != end && nodes[fast].next != end) {
+	    slow = nodes[slow].next;
+	    fast = nodes[nodes[fast].next].next;
+	}
+
+	size_t second_half = nodes[slow].next;
+	nodes[slow].next = SIZE_MAX;
+
+	if (second_half != SIZE_MAX) {
+	    nodes[second_half].prev = SIZE_MAX;
+	}
+	return {second_half,slow};
     }
-    return second_half;
-}
 
-size_t mergeSort(size_t start, size_t end) {
-    if (start == SIZE_MAX || start == end) return start;
-	std::cout << "sort\n";
+    size_t mergeSort(size_t start, size_t end) {
+	if (start == SIZE_MAX || start == end) return start;
 
-    size_t second_half = split(start, end);
+	auto [second_half_start, start_end] = split(start, end);
 
-    // Recursive sorting
-    start = mergeSort(start, second_half);
-    second_half = mergeSort(second_half, end);  // Corrected from using `tail`
+	start = mergeSort(start, start_end);
+	second_half_start = mergeSort(second_half_start, end);
 
-    size_t _tail = SIZE_MAX;
-    size_t _head = merge(start, second_half, _tail);
-    tail = _tail;  // Ensure tail is updated correctly
+	size_t _tail = SIZE_MAX;
+	size_t _head = merge(start, second_half_start, _tail);
+	tail = _tail;
 
-    return _head;
-}
+	return _head;
+    }
     void sort(Iterator start, Iterator _end) {
 	if (start == end() || start == _end) return;	
 
@@ -245,34 +239,33 @@ size_t mergeSort(size_t start, size_t end) {
     }
 
     Iterator insert(Iterator it, const T& data) {
-        size_t newIndex = allocateNode(data); // Allocate a new node with data
+        size_t newIndex = allocateNode(data);
     
         if (!(it == end())) {
             size_t currentIndex = it.getIndex();
     
-            // Update pointers
-            nodes[newIndex].next = currentIndex; // New node points to current
-            nodes[newIndex].prev = nodes[currentIndex].prev; // Previous node is set
+            nodes[newIndex].next = currentIndex;
+            nodes[newIndex].prev = nodes[currentIndex].prev;
     
             if (nodes[currentIndex].prev != SIZE_MAX) {
-                nodes[nodes[currentIndex].prev].next = newIndex; // Link previous to new
+                nodes[nodes[currentIndex].prev].next = newIndex;
             } else {
-                head = newIndex; // New node becomes the head
+                head = newIndex;
             }
     
-            nodes[currentIndex].prev = newIndex; // Link current to new
+            nodes[currentIndex].prev = newIndex;
         } else {
-            // Inserting at the end
+
             if (tail != SIZE_MAX) {
-                nodes[tail].next = newIndex; // Link the last node to new
-                nodes[newIndex].prev = tail; // New node points back to last
+                nodes[tail].next = newIndex;
+                nodes[newIndex].prev = tail;
             } else {
-                head = newIndex; // If list was empty, head also becomes the new node
+                head = newIndex;
             }
-            tail = newIndex; // Update tail to the new node
+            tail = newIndex;
         }
     
-        return Iterator(this, newIndex); // Return an iterator to the new node
+        return Iterator(this, newIndex);
     }
 
     T& front() {
@@ -284,14 +277,14 @@ size_t mergeSort(size_t start, size_t end) {
     }
 
     void pop_front() {
-        if (head == SIZE_MAX) return;  // No nodes to pop
+        if (head == SIZE_MAX) return;
     
         remove(head);
     }
 
     void pop_back() {
         if (tail == SIZE_MAX) { 
-            return;  // No nodes to pop
+            return;
         }
     
         remove(tail);
@@ -324,6 +317,5 @@ size_t mergeSort(size_t start, size_t end) {
         return Iterator(this, SIZE_MAX);
     }
 };
-
 
 #endif
