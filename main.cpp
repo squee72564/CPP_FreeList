@@ -3,11 +3,8 @@
 #include <cassert>
 #include <list>
 #include <chrono>
-#include <cstdlib>
-#include <limits>
 #include <random>
 #include <algorithm>
-#include <iterator>
 #include <numeric>
 #include <functional>
 
@@ -25,8 +22,8 @@ private:
     };
 
     FreeList<Node> nodeList;
-    unordered_map<int,FreeList<Node>::Iterator> keyLFU;
-    unordered_map<int,FreeList<pair<int,int>>::Iterator> keyLRU;
+    unordered_map<int,FreeList<Node>::iterator> keyLFU;
+    unordered_map<int,FreeList<pair<int,int>>::iterator> keyLRU;
     int cap;
     int size;
     
@@ -53,16 +50,16 @@ public:
     }   
 
     int get(int key) {
-        auto it = keyLFU.find(key);
+        const auto it = keyLFU.find(key);
 
         if (it == keyLFU.end()) return -1;
 
         // First get the k,v pair; add to next node with freq+1; remove from current node
-        auto currIt = it->second;
-        auto nextIt = next(currIt);
+        const auto currIt = it->second;
+        const auto nextIt = next(currIt);
         const auto [_, value] = *keyLRU[key];
 
-        auto listIt = (nextIt == nodeList.end() || nextIt->freq != (currIt->freq+1))
+        const auto listIt = (nextIt == nodeList.end() || nextIt->freq != (currIt->freq+1))
             ? nodeList.insert(nextIt, Node(currIt->freq+1))
             : nextIt;
         
@@ -80,7 +77,7 @@ public:
     void put(int key, int value) {
         if (cap == 0) return;
 
-        auto it = keyLFU.find(key);
+        const auto it = keyLFU.find(key);
 
         if (it == keyLFU.end()) {
             if (size == cap) { // Eject LRU from LFU
@@ -97,7 +94,7 @@ public:
                 size--;
             }
 
-            auto listIt = (nodeList.empty() || nodeList.begin()->freq != 1)
+            const auto listIt = (nodeList.empty() || nodeList.begin()->freq != 1)
                 ? nodeList.insert(nodeList.begin(), Node(1))
                 : nodeList.begin();
             
@@ -109,8 +106,8 @@ public:
         }
 
         // Increment in nodeList and update LFU/LRU iterators
-        auto currIt = it->second;
-        auto listIt = (next(currIt) == nodeList.end() || next(currIt)->freq != (currIt->freq+1))
+        const auto currIt = it->second;
+        const auto listIt = (next(currIt) == nodeList.end() || next(currIt)->freq != (currIt->freq+1))
             ? nodeList.insert(next(currIt), Node(currIt->freq+1))
             : next(currIt);
 
@@ -184,7 +181,7 @@ void test_performance() {
     total2 += measure_iteration(freeList);
     total2 += measure_deletion(freeList);
     freeList.clear();
-    std::cout << "Total time: " << total2 << "\n";
+    std::cout << "Total time: " << total2 << "\n\n";
 
     std::cout << "FreeList was " << (total/total2) << " times faster\n";
 
@@ -302,33 +299,33 @@ void test_LFUCache() {
     std::cout << "Put(2)\n";
     
     int t = obj->get(1);
-    std::cout << "Expected 1, get(1) = " << t << "\n";
+    std::cout << "get(1) = " << t << ",  Expected 1\n";
     assert(t == 1);
     
     obj->put(3,3);
     std::cout << "Put(5)\n";
     
     t = obj->get(2);
-    std::cout << "Expected -1, get(2) = " << t << "\n";
+    std::cout << "get(2) = " << t << ", Expected -1\n";
     assert(t == -1);
     
     t = obj->get(3);
-    std::cout << "Expected 3, get(3) = " << t << "\n";
+    std::cout << "get(3) = " << t << ",  Expected 3\n";
     assert(t == 3);
     
     obj->put(5,5);
     std::cout << "Put(5)\n";
     
     t = obj->get(1);
-    std::cout << "Expected -1, get(1) = " << t << "\n";
+    std::cout << "get(1) = " << t << ", Expected -1\n";
     assert(t == -1);
     
     t = obj->get(3);
-    std::cout << "Expected 3, get(3) = " << t << "\n";
+    std::cout << "get(3) = " << t << ",  Expected 3\n";
     assert(t == 3);
 
     t = obj->get(5);
-    std::cout << "Expected 5, get(5) = " << t << "\n\n";
+    std::cout << "get(5) = " << t << ",  Expected 5\n";
     assert(t == 5);
 }
 
