@@ -5,6 +5,7 @@
 #include <iterator>
 #include <limits>
 #include <cstddef>
+#include <cstdint>
 
 template<typename T>
 class FreeList {
@@ -161,6 +162,9 @@ public:
     using value_type = T;
 
     class Iterator {
+	friend class FreeList;
+	friend class ConstIterator;
+
     public:
         using iterator_category = std::bidirectional_iterator_tag;
         using difference_type = std::ptrdiff_t;
@@ -185,9 +189,18 @@ public:
             return list->nodes[index].data;
         }
 
+        reference operator*() const {
+            return list->nodes[index].data;
+        }
+
         pointer operator->() {
             return &list->nodes[index].data;
         }
+
+        const pointer operator->() const {
+            return &list->nodes[index].data;
+        }
+
 
         Iterator& operator++() {
             index = list->nodes[index].next;
@@ -223,16 +236,22 @@ public:
             return !(*this == other);
         }
 
+    private:
+
         size_t getIndex() const {
             return index;
         }
 
-    private:
+	FreeList* getList() const {
+	    return list;
+	}
+	
         FreeList* list;
         size_t index;
     };
 
     class ConstIterator {
+	friend class FreeList;
     public:
 	using iterator_category = std::bidirectional_iterator_tag;
 	using difference_type = std::ptrdiff_t;
@@ -246,7 +265,7 @@ public:
 	    : list(list), index(index) {}
 
 	ConstIterator(const Iterator& it)
-	    : list(it.list), index(it.getIndex()) {}
+	    : list(it.getList()), index(it.getIndex()) {}
 
 	ConstIterator(const ConstIterator&) = default;
 	ConstIterator(ConstIterator&&) noexcept = default;
@@ -295,11 +314,12 @@ public:
 	    return !(*this == other);
 	}
 
+    private:
+
 	size_t getIndex() const {
 	    return index;
 	}
 
-    private:
         const FreeList* list;
         size_t index;
     };
@@ -325,7 +345,7 @@ public:
     const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
     const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
 
-    FreeList() : head(SIZE_MAX), tail(SIZE_MAX), freeHead(SIZE_MAX) {}
+    FreeList() : nodes(), head(SIZE_MAX), tail(SIZE_MAX), freeHead(SIZE_MAX), size_(0) {}
 
     FreeList(size_t count) : FreeList() {
         for (size_t i = 0; i < count; ++i) {
@@ -336,12 +356,6 @@ public:
     FreeList(size_t count, const T& value) : FreeList() {
         for (size_t i = 0; i < count; ++i) {
             push_back(value);
-        }
-    }
-
-    FreeList(iterator first, iterator last) : FreeList() {
-        for (auto it = first; it != last; ++it) {
-            push_back(*it);
         }
     }
 
@@ -372,17 +386,17 @@ public:
     }
 
     template <typename Compare = std::less<T> >
-    void sort(const iterator start = iterator(),
-	      const iterator _end = iterator(),
+    void sort(const const_iterator start = const_iterator(),
+	      const const_iterator _end = const_iterator(),
 	      const Compare& comp = Compare())
     {
         if (empty() || start == end() || start == _end) return;
 
-        iterator actualStart = (start == iterator()) ? begin() : start;
-        iterator actualEnd = (_end == iterator()) ? end() : _end;
+        iterator actualStart = (start == const_iterator()) ? cbegin() : start;
+        iterator actualEnd = (_end == const_iterator()) ? cend() : _end;
 
         size_t start_idx = actualStart.getIndex();
-        size_t end_idx = (actualEnd == end()) ? tail : _end.getIndex();
+        size_t end_idx = (actualEnd == cend()) ? tail : _end.getIndex();
 
         head = mergeSort(start_idx, end_idx, comp);
     }
@@ -447,21 +461,6 @@ public:
     }
 
     template<typename... Args>
-    void emplace_front(Args&&... args) {
-	size_t index = allocateNode(T(std::forward<Args>(args)...));
-
-        if (head != SIZE_MAX) {
-            nodes[index].next = head;
-            nodes[head].prev = index;
-        }
-        head = index;
-        if (tail == SIZE_MAX) {
-            tail = index;
-        }
-    }
-
-
-    template<typename... Args>
     T& emplace_back(Args&&... args) {
         size_t index = allocateNode(T(std::forward<Args>(args)...));
 
@@ -477,20 +476,6 @@ public:
         return nodes[index].data;
     }
 
-    template<typename... Args>
-    void emplace_back(Args&&... args) {
-        size_t index = allocateNode(T(std::forward<Args>(args)...));
-
-        if (head == SIZE_MAX) {
-            head = index;
-            tail = index;
-        } else {
-            nodes[tail].next = index;
-            nodes[index].prev = tail;
-            tail = index;
-        }
-    }
-
     iterator erase(iterator pos) {
         iterator next = pos;
         ++next;
@@ -498,11 +483,11 @@ public:
         return next;
     }
 
-    const_iterator erase(const_iterator pos) {
+    iterator erase(const_iterator pos) {
         const_iterator next = pos;
         ++next;
         remove(pos.getIndex());
-        return next;
+        return iterator(this, next.getIndex());
     }
 
     iterator erase(iterator first, iterator last) {
@@ -513,12 +498,12 @@ public:
         return last;
     }
 
-    const_iterator erase(const_iterator first, const_iterator last) {
+    iterator erase(const_iterator first, const_iterator last) {
         while (first != last) {
             first = erase(first);
         }
 
-        return last;
+        return iterator(this, last.getIndex());
     }
 
     iterator find(const T& value) {
@@ -531,7 +516,7 @@ public:
     }
 
     template <typename U>
-    iterator insert(iterator it, U&& data) {
+    iterator insert(const_iterator it, U&& data) {
         size_t newIndex = allocateNode(std::forward<U>(data));
     
         if (!(it == end())) {
@@ -561,7 +546,7 @@ public:
         return iterator(this, newIndex);
     }
 
-    iterator insert(iterator it, const T& data) {
+    iterator insert(const_iterator it, const T& data) {
         size_t newIndex = allocateNode(data);
     
         if (!(it == end())) {
@@ -592,7 +577,7 @@ public:
     }
 
     template<class InputIt>
-    iterator insert(iterator pos, InputIt first, InputIt last) {
+    iterator insert(const_iterator pos, InputIt first, InputIt last) {
         size_t currentIndex = pos.getIndex();
         size_t firstNewIndex = SIZE_MAX;
 
@@ -629,7 +614,7 @@ public:
         return iterator(this, firstNewIndex);
     }
 
-    iterator insert(iterator pos, std::initializer_list<T> ilist) {
+    iterator insert(const_iterator pos, std::initializer_list<T> ilist) {
         return insert(pos, ilist.begin(), ilist.end());
     }
 
