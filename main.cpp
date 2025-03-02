@@ -122,6 +122,17 @@ public:
 };
 
 template<typename Container>
+double measure_sort(Container& container) {
+    auto start = std::chrono::high_resolution_clock::now();
+    container.sort(std::greater<int>());
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    std::cout << "Sort time: " << duration.count() << " seconds\n";
+
+    return duration.count();
+}
+
+template<typename Container>
 double measure_insertion(Container& container, size_t count) {
     auto start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < count; ++i) {
@@ -161,27 +172,34 @@ double measure_iteration(Container& container) {
 void test_performance() {
     const size_t count = 400000000;
     
-    std::list<int> stdList;
-    FreeList<int> freeList;
-
-    freeList.reserve(count);
 
     double total = 0.0f;
     double total2 = 0.0f;
 
-    std::cout << "Testing std::list with count == " << count << "\n";
-    total += measure_insertion(stdList, count);
-    total += measure_iteration(stdList);
-    total += measure_deletion(stdList);
-    stdList.clear();
-    std::cout << "Total time: " << total << "\n";
+    {
+	    std::list<int> stdList;
 
-    std::cout << "\nTesting FreeList with count == " << count << "\n";
-    total2 += measure_insertion(freeList, count);
-    total2 += measure_iteration(freeList);
-    total2 += measure_deletion(freeList);
-    freeList.clear();
-    std::cout << "Total time: " << total2 << "\n\n";
+	    std::cout << "Testing std::list with count == " << count << "\n";
+	    total += measure_insertion(stdList, count);
+	    total += measure_iteration(stdList);
+	    total += measure_deletion(stdList);
+	    total += measure_sort(stdList);
+	    stdList.clear();
+	    std::cout << "Total time: " << total << "\n";
+    }
+
+    {
+	    FreeList<int> freeList;
+	    freeList.reserve(count);
+
+	    std::cout << "\nTesting FreeList with count == " << count << "\n";
+	    total2 += measure_insertion(freeList, count);
+	    total2 += measure_iteration(freeList);
+	    total2 += measure_deletion(freeList);
+	    total2 += measure_sort(freeList);
+	    freeList.clear();
+	    std::cout << "Total time: " << total2 << "\n\n";
+    }
 
     std::cout << "FreeList was " << (total/total2) << " times faster\n";
 
