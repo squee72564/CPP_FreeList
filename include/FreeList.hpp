@@ -6,7 +6,6 @@
 #include <limits>
 #include <cstddef>
 #include <cstdint>
-#include <execution>
 
 template<typename T>
 class FreeList {
