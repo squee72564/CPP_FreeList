@@ -133,19 +133,6 @@ double measure_sort(Container& container) {
 }
 
 template<typename Container>
-double measure_insertion(Container& container, size_t count) {
-    auto start = std::chrono::high_resolution_clock::now();
-    for (size_t i = 0; i < count; ++i) {
-        container.push_back(i);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = end - start;
-    std::cout << "Insertion time: " << duration.count() << " seconds\n";
-
-    return duration.count();
-}
-
-template<typename Container>
 double measure_deletion(Container& container) {
     auto start = std::chrono::high_resolution_clock::now();
     while (!container.empty()) {
@@ -170,17 +157,28 @@ double measure_iteration(Container& container) {
 }
 
 void test_performance() {
-    const size_t count = 400000000;
+    const size_t count = 200000000;
     
 
     double total = 0.0f;
     double total2 = 0.0f;
 
-    {
-	    std::list<int> stdList;
+    std::vector<int> v;
 
+    for (size_t i = 0; i < count; ++i) {
+        v.emplace_back(i);
+    }
+
+
+    {
 	    std::cout << "Testing std::list with count == " << count << "\n";
-	    total += measure_insertion(stdList, count);
+
+	    auto start = std::chrono::high_resolution_clock::now();
+	    std::list<int> stdList(v.begin(), v.end());
+	    auto end = std::chrono::high_resolution_clock::now();
+	    std::chrono::duration<double> duration = end - start;
+	    std::cout << "Insertion time: " << duration.count() << " seconds\n";
+	    total += duration.count();
 	    total += measure_iteration(stdList);
 	    total += measure_deletion(stdList);
 	    total += measure_sort(stdList);
@@ -189,11 +187,14 @@ void test_performance() {
     }
 
     {
-	    FreeList<int> freeList;
-	    freeList.reserve(count);
-
 	    std::cout << "\nTesting FreeList with count == " << count << "\n";
-	    total2 += measure_insertion(freeList, count);
+
+	    auto start = std::chrono::high_resolution_clock::now();
+	    FreeList<int> freeList(v.begin(), v.end());
+	    auto end = std::chrono::high_resolution_clock::now();
+	    std::chrono::duration<double> duration = end - start;
+	    std::cout << "Insertion time: " << duration.count() << " seconds\n";
+	    total2 += duration.count();
 	    total2 += measure_iteration(freeList);
 	    total2 += measure_deletion(freeList);
 	    total2 += measure_sort(freeList);
@@ -357,8 +358,8 @@ void test_mergeSort() {
 
     for (int i = 0; i < 25; ++i) {
 	const int t = dist(gen);
-	vec.push_back(t);
-	freeList.push_back(t);
+	vec.emplace_back(t);
+	freeList.emplace_back(t);
     }
 
     std::cout << "Before sort\n";
