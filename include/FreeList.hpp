@@ -197,7 +197,7 @@ public:
             return &list->nodes[index].data;
         }
 
-        const pointer operator->() const {
+        pointer operator->() const {
             return &list->nodes[index].data;
         }
 
@@ -359,7 +359,13 @@ public:
         }
     }
 
-    FreeList(const_iterator first, const_iterator last) : FreeList() {
+    template <typename Iterator>
+    FreeList(
+	Iterator first,
+	Iterator last,
+	typename std::enable_if<!std::is_same<typename std::iterator_traits<Iterator>::value_type, T>::value>::type* = nullptr)
+    	: FreeList()
+    {
         for (auto it = first; it != last; ++it) {
             push_back(*it);
         }
@@ -386,8 +392,8 @@ public:
     }
 
     template <typename Compare = std::less<T> >
-    void sort(const const_iterator start = const_iterator(),
-	      const const_iterator _end = const_iterator(),
+    void sort(const const_iterator start,
+	      const const_iterator _end,
 	      const Compare& comp = Compare())
     {
         if (empty() || start == end() || start == _end) return;
