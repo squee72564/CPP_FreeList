@@ -157,7 +157,7 @@ double measure_iteration(Container& container) {
 }
 
 void test_performance() {
-    const size_t count = 200000000;
+    const size_t count = 400000000;
     
 
     double total = 0.0f;
@@ -180,8 +180,8 @@ void test_performance() {
 	    std::cout << "Insertion time: " << duration.count() << " seconds\n";
 	    total += duration.count();
 	    total += measure_iteration(stdList);
-	    total += measure_deletion(stdList);
 	    total += measure_sort(stdList);
+	    total += measure_deletion(stdList);
 	    stdList.clear();
 	    std::cout << "Total time: " << total << "\n";
     }
@@ -196,8 +196,8 @@ void test_performance() {
 	    std::cout << "Insertion time: " << duration.count() << " seconds\n";
 	    total2 += duration.count();
 	    total2 += measure_iteration(freeList);
-	    total2 += measure_deletion(freeList);
 	    total2 += measure_sort(freeList);
+	    total2 += measure_deletion(freeList);
 	    freeList.clear();
 	    std::cout << "Total time: " << total2 << "\n\n";
     }
