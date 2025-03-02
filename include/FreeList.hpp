@@ -440,12 +440,16 @@ public:
     FreeList() : nodes(), head(SIZE_MAX), tail(SIZE_MAX), freeHead(SIZE_MAX), size_(0) {}
 
     FreeList(size_t count) : FreeList() {
+	reserve(count);
+
         for (size_t i = 0; i < count; ++i) {
             push_back(T{});
         }
     }
 
     FreeList(size_t count, const T& value) : FreeList() {
+	reserve(count);
+
         for (size_t i = 0; i < count; ++i) {
             push_back(value);
         }
@@ -453,17 +457,38 @@ public:
 
     template <typename Iterator>
     FreeList(
-	Iterator first,
-	Iterator last,
-	typename std::enable_if<!std::is_same<typename std::iterator_traits<Iterator>::value_type, T>::value>::type* = nullptr)
-    	: FreeList()
+        Iterator first,
+        Iterator last,
+        typename std::enable_if<!std::is_same<typename std::iterator_traits<Iterator>::value_type, T>::value>::type* = nullptr)
+        : FreeList()
     {
+        auto n = std::distance(first, last);
+        reserve(n);
+    
+        for (auto it = first; it != last; ++it) {
+            push_back(*it);
+        }
+    }
+    
+    // Overload the constructor for the case where Iterator's value_type is the same as T
+    template <typename Iterator>
+    FreeList(
+        Iterator first,
+        Iterator last,
+        typename std::enable_if<std::is_same<typename std::iterator_traits<Iterator>::value_type, T>::value>::type* = nullptr)
+        : FreeList()
+    {
+        auto n = std::distance(first, last);
+        reserve(n);
+    
         for (auto it = first; it != last; ++it) {
             push_back(*it);
         }
     }
 
     FreeList(std::initializer_list<T> init) : FreeList() {
+	reserve(init.size());
+
         for (const auto& value : init) {
             push_back(value);
         }
